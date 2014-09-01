@@ -52,3 +52,9 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
+
+# crawlers
+crawlers/*
+!crawlers/example.py
+!crawlers/__init__.py
+.idea
