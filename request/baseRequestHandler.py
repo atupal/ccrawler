@@ -86,7 +86,17 @@ class BaseRequestHandler(object):
         if self.use_proxy and proxy:
             self._add_proxy(proxy)
 
-        task['response'] = resp.content
+        response = {
+                'content':str,
+                'origin_url': task['url'],
+                'url': resp.url,
+                'cookie': str,
+                'status_code': int,
+                'headers': dict,
+                }
+        response['content'] = resp.content
+
+        task['response'] = response
         if resp.status_code != 200:
             #logging.error('not 200 http response')
             #logging.error(url)

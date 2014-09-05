@@ -5,7 +5,10 @@
     ~~~~~~~~~~~~~~~~~~~
 """
 import redis
-import lxml.html
+try:
+    import lxml.html
+except:
+    pass
 
 import config
 

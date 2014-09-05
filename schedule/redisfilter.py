@@ -15,6 +15,8 @@ except ImportError:
 import hashlib
 from struct import unpack, pack, calcsize
 
+from pybloom import BloomFilter, ScalableBloomFilter
+
 running_python_3 = sys.version_info[0] == 3
 
 def range_fn(*args):
@@ -153,6 +155,7 @@ class RedisBloomFilter(object):
         """
         if key in self:
             return True
+        self.count += 1
         pipeline = self.connection.pipeline(transaction=False)
         bits_per_slice = self.bits_per_slice
         hashes = self.make_hashes(key)
@@ -164,7 +167,6 @@ class RedisBloomFilter(object):
             pipeline.setbit(self.bitkey, offset + k, 1)
             offset += bits_per_slice
         pipeline.execute()
-        self.count += 1
         return False
 
     def __getstate__(self):
@@ -216,8 +218,9 @@ class ScalableRedisBloomFilter(object):
             return True
         if not self.filters:
             filter = RedisBloomFilter(
-                capacity=self.initial_capacity,
+                self.initial_capacity,
                 error_rate=self.error_rate * (1.0 - self.ratio),
+                connection=self.connection,
                 bitkey='%s_%d' % (self.prefixbitkey, len(self.filters)+1),
                 clear_filter=self.clear_filter
                 )
@@ -226,8 +229,9 @@ class ScalableRedisBloomFilter(object):
             filter = self.filters[-1]
             if filter.count >= filter.capacity:
                 filter = RedisBloomFilter(
-                    capacity=filter.capacity * self.scale,
+                    filter.capacity * self.scale,
                     error_rate=filter.error_rate * self.ratio,
+                    connection=self.connection,
                     bitkey='%s_%d' % (self.prefixbitkey, len(self.filters)+1),
                     clear_filter=self.clear_filter)
                 self.filters.append(filter)
@@ -248,8 +252,8 @@ class ScalableRedisBloomFilter(object):
         return sum(f.count for f in self.filters)
 
 def test():
-    scalablef = ScalableRedisBloomFilter(initial_capacity=100, error_rate=0.001, prefixbitkey='hehe', clear_filter=True)
-    f = RedisBloomFilter(1000, error_rate=0.001, bitkey='haha', clear_filter=True)
+    scalablef = ScalableRedisBloomFilter(initial_capacity=100000000, error_rate=0.001, prefixbitkey='test', clear_filter=True)
+    f = RedisBloomFilter(400000000, error_rate=0.01, bitkey='test', clear_filter=True)
     keys_in = []
     keys_notin = []
     from uuid import uuid4
@@ -267,5 +271,72 @@ def test():
     print ([ key in f for key in keys_in ])
     print (([ key in f for key in keys_notin ]))
 
+def test_gevent():
+    f = ScalableRedisBloomFilter(initial_capacity=100000000, error_rate=0.0001, prefixbitkey='test_gevent', clear_filter=True)
+
+    def add_key(key):
+        with lock:
+            f.add(key)
+
+    import gevent
+    import sys
+    if 'threading' in sys.modules:
+        del sys.modules['threading']
+    from gevent import monkey
+    monkey.patch_all()
+    from gevent.pool import Pool
+    from gevent.lock import Semaphore
+    lock = Semaphore()
+    gp = Pool(100)
+    import time
+    st = time.time()
+    for i in xrange(1000):
+        gp.spawn(add_key, i)
+    gp.join()
+    print time.time() - st
+    print [ i in f for i in xrange(1000) ]
+    print [ i in f for i in xrange(1000, 1500) ]
+
+def test_pybloom():
+    from pybloom import BloomFilter, ScalableBloomFilter
+    f = ScalableRedisBloomFilter(100000000, 0.0001)
+    import time
+    st = time.time()
+    for i in xrange(1000):
+        f.add(i)
+    print time.time() - st
+    print [ i in f for i in xrange(1000) ]
+    print [ i in f for i in xrange(1000, 2000) ]
+
+def test_gevnet_pybloom():
+    from pybloom import BloomFilter, ScalableBloomFilter
+    f = ScalableRedisBloomFilter(100000000, 0.0001)
+
+    def add_key(key):
+        with lock:
+            f.add(key)
+
+    import gevent
+    import sys
+    if 'threading' in sys.modules:
+        del sys.modules['threading']
+    from gevent import monkey
+    monkey.patch_all()
+    from gevent.pool import Pool
+    from gevent.lock import Semaphore
+    lock = Semaphore()
+    gp = Pool(100)
+    import time
+    st = time.time()
+    for i in xrange(1000):
+        gp.spawn(add_key, i)
+    gp.join()
+    print time.time() - st
+    print [ i in f for i in xrange(1000) ]
+    print [ i in f for i in xrange(1000, 2000) ]
+
 if __name__ == '__main__':
-    test()
+    #test()
+    #test_gevent()
+    #test_pybloom()
+    test_gevnet_pybloom()

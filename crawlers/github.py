@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-    example.py
-    ~~~~~~~~~~
+    github.py
+    ~~~~~~~~~
 """
 import os
 import sys
@@ -20,26 +20,42 @@ import json
 from bs4 import BeautifulSoup
 
 class RequestHandler(BaseRequestHandler):
-    def handle(self, task, use_proxy=False, **kwargs):
+    def handle(self, task, **kwargs):
         task = super(RequestHandler, self).handle(task)
         return task
 
 class ParseHandler(BaseParseHandler):
+    def get_profile():
+        pass
+
+    def get_followers():
+        pass
+
     def handle(self, task):
         r = task['response']
-        soup = BeautifulSoup(r, "lxml")
         new_tasks = []
-        if task['url_depth'] < 2:
-            for link in soup.find_all('a'):
-                if link.get('href', '').startswith('http') and not link.get('href', '').endswith('exe'):
-                    item = {'url': link.get('href'), 'url_depth': task['url_depth']}
-                    new_tasks.append(item)
-        return task, new_tasks
+        item = None
+        if task['type'] == 'get_profile':
+            item = r.content
+        elif task['type'] == 'get_followers':
+            users= json.loads(r.content)
+            for user in users:
+                name = user['login']
+                new_tasks.append({
+                    'url': 'https://api.github.com/users/%s' % name,
+                    'type': 'get_profile',
+                        })
+                new_tasks.append({
+                        'url': 'https://api.github.com/users/%s/followers' % name,
+                        'type': 'get_followers',
+                        })
+        return item, new_tasks
 
 class Scheduler(BaseScheduler):
     def init_generator(self):
         task = {
-                'url': 'http://qq.com',
+                'url': 'https://api.github.com/users/atupal/followers',
+                'type': 'get_followers',
                 }
         yield task
 

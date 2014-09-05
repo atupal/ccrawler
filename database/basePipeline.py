@@ -6,8 +6,12 @@
 import logging
 import redis
 
-from pymongo import MongoClient
-from pymongo import ReadPreference
+try:
+    from pymongo import MongoClient
+    from pymongo import ReadPreference
+    import couchdb
+except:
+    pass
  
 class BasePipeline(object):
     def __init__(self, ):
@@ -55,6 +59,13 @@ class BasePipeline(object):
 
     def save_to_kafka(self, result):
         pass
+
+    def save_to_couchdb(self, result):
+        if not hasattr(self, 'couch'):
+            import config
+            self.couch = couchdb.Server(config.couchdb)
+        db = self.couch['weibo']
+        db.save(result)
 
     def print_result(self, result, l=1024):
         print ('%s crawler:' % self.crawler_name + '\033[31m' + str(result)[:l] + 

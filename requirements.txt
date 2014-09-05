@@ -1,5 +1,11 @@
 requests
 celery>=3.1.13
 gevent
-pymongo
 redis
+
+beautifulsoup4
+#lxml
+pymongo
+pybloom
+couchdb
+jieba

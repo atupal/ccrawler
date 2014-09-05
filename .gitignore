@@ -54,7 +54,11 @@ docs/_build/
 
 
 # crawlers
-crawlers/*
-!crawlers/example.py
-!crawlers/__init__.py
+#crawlers/*
+#!crawlers/example.py
+#!crawlers/__init__.py
 .idea
+libs/*
+!libs/download_thirdparty_libs.sh
+data
+var

@@ -17,3 +17,15 @@ class Cookie(object):
     @classmethod
     def add_cookie(cls, url, handle):
         pass
+
+    def __str__(self):
+        return ''
+
+    def __repr__(self):
+        return ''
+
+def test():
+    pass
+
+if __name__ == '__main__':
+    test()
