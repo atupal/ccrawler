@@ -87,14 +87,14 @@ class BaseRequestHandler(object):
             self._add_proxy(proxy)
 
         response = {
-                'content':str,
+                'content': resp.content,
                 'origin_url': task['url'],
                 'url': resp.url,
-                'cookie': str,
-                'status_code': int,
-                'headers': dict,
+                'cookies': dict(resp.cookies),
+                'status_code': resp.status_code,
+                'headers': dict(resp.headers),
                 }
-        response['content'] = resp.content
+        #response['content'] = resp.content
 
         task['response'] = response
         if resp.status_code != 200:

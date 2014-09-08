@@ -29,8 +29,10 @@ for crawler in celeryconfig.crawlers:
     #           | tasks[crawler['name'] + '.pipeline'].s()).delay()
 
 import time
+cnt = 0
 while 1:
     try:
+        cnt += 1
         if (get_message_queue_size('parse') < config.max_task_queue_size * 5 and 
             get_message_queue_size('pipeline') < config.max_task_queue_size * 5 and
             get_message_queue_size('schedule') < config.max_task_queue_size * 15 and
@@ -38,12 +40,15 @@ while 1:
             for crawler in celeryconfig.crawlers:
                 #tasks[crawler['name'] + '.schedule'].delay(check_task=True)
                 for task in tasks[crawler['name']+'.schedule'].scheduler.new_tasks_generator():
-                    print task
                     if task.get('priority', None):
                         tasks[crawler['name']+'.request_priority'].delay(task)
                     else:
                         tasks[crawler['name']+'.request'].delay(task)
 
+                if cnt >= 150:
+                    if not config.multi_scheduler:
+                        tasks[crawler['name']+'.schedule'].scheduler.save_filter()
+                        cnt = 0
         time.sleep(2)
     except KeyboardInterrupt:
         exit(0)
