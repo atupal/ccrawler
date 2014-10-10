@@ -26,7 +26,7 @@ class RequestHandler(BaseRequestHandler):
 
 class ParseHandler(BaseParseHandler):
     def handle(self, task):
-        r = task['response']
+        r = task['response']['content']
         soup = BeautifulSoup(r, "lxml")
         new_tasks = []
         if task['url_depth'] < 2:
@@ -47,6 +47,7 @@ class Pipeline(BasePipeline):
     def process(self, results):
         for r in results:
             self.print_result(r)
+            pass
 
 if __name__ == '__main__':
     from bin.stand_alone_run import BaseCrawler

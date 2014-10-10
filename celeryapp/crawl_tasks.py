@@ -31,16 +31,26 @@ for crawler in celeryconfig.crawlers:
               ignore_result=True)
     def request(self, dict_item, **kwargs):
         try:
-            task = self.handler.handle(dict_item, **kwargs)
-            if task.get('priority', None):
-                app.tasks[self.crawler_name + '.parse_priority'].delay(task)
-            else:
-                app.tasks[self.crawler_name + '.parse'].delay(task)
+            try:
+                task = self.handler.handle(dict_item, **kwargs)
+                if task.get('priority', None):
+                    #app.tasks[self.crawler_name + '.parse_priority'].delay(task)
+                    app.tasks[self.crawler_name + '.parse'].apply_async((task, ), compression='zlib', 
+                        queue='parse_priority')
+                else:
+                    #app.tasks[self.crawler_name + '.parse'].delay(task)
+                    app.tasks[self.crawler_name + '.parse'].apply_async((task, ), compression='zlib')
+            except Exception as exc:
+                # retry after some secends
+                raise self.retry(exc=exc, countdown=config.retry_time)
         except Retry as exc: 
-            # retry after some secends
-            raise self.retry(exc=exc, countdown=config.retry_time)
+            pass
         except:
             # put task to new_task queue
+            if 'retry_cnt' in dict_item:
+              dict_item['retry_cnt'] += 1
+            else:
+              dict_item['retry_cnt'] = 1
             app.tasks[self.crawler_name + '.schedule'].apply_async(([dict_item], ), compression='zlib')
     # -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
@@ -75,7 +85,8 @@ for crawler in celeryconfig.crawlers:
     def parse(self, dict_item, **kwargs):
         parse_result, new_tasks = self.handler.handle(dict_item, **kwargs)
         if parse_result:
-            app.tasks[self.crawler_name + '.pipeline'].delay(parse_result)
+            #app.tasks[self.crawler_name + '.pipeline'].delay(parse_result)
+            app.tasks[self.crawler_name + '.pipeline'].apply_async((parse_result, ), compression='zlib')
         if new_tasks:
             app.tasks[self.crawler_name + '.schedule'].apply_async((new_tasks, ), compression='zlib')
         #return parse_result
@@ -101,9 +112,23 @@ for crawler in celeryconfig.crawlers:
     @app.task(name=crawler.get('name')+'.pipeline',
               bind=True,
               pipeline=crawler.get('pipeline'),
+              crawler_name=crawler.get('name'),
+              max_retries=config.max_retries,
               ignore_result=True)
     def pipeline(self, dict_item, **kwargs):
-        return self.pipeline.process([dict_item], **kwargs)
+        try:
+            try:
+                return self.pipeline.process([dict_item], **kwargs)
+            except Exception as exc:
+                # retry after some secends
+                raise self.retry(exc=exc, countdown=config.retry_time)
+        except Retry as exc: 
+            pass
+        except:
+            # put task to new_task queue
+            print 'new retry pipe'
+            app.tasks[self.crawler_name + '.pipeline'].apply_async((dict_item, ), compression='zlib')
+
     # -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
     # -.-.-.-.-.-.-.-.-.-.-.-.-.-.schedule task-.-.-.-.-.-.-.-.-.-.-.-.-
@@ -112,14 +137,20 @@ for crawler in celeryconfig.crawlers:
               scheduler=crawler.get('scheduler'),
               crawler_name=crawler.get('name'),
               ignore_result=True)
-    def schedule(self, tasks=None, check_task=False):
+    def schedule(self, tasks=None, check_task=False, save_filter=False):
+        if save_filter:
+            self.scheduler.save_filter()
+            return
+
         #  initcail tasks:
         if not tasks and not check_task:
             for task in self.scheduler.init_generator():
                 if task.get('priority', None):
-                    app.tasks[self.crawler_name+'.request_priority'].delay(task)
+                    #app.tasks[self.crawler_name+'.request_priority'].delay(task)
+                    app.tasks[self.crawler_name+'.request_priority'].apply_async((task, ), compression='zlib')
                 else:
-                    app.tasks[self.crawler_name+'.request'].delay(task)
+                    #app.tasks[self.crawler_name+'.request'].delay(task)
+                    app.tasks[self.crawler_name+'.request'].apply_async((task, ), compression='zlib')
                 #group(app.tasks[self.crawler_name + '.request'].s(task) 
                 #        | app.tasks[self.crawler_name + '.parse'].s() 
                 #        | app.tasks[self.crawler_name + '.pipeline'].s()
@@ -132,11 +163,7 @@ for crawler in celeryconfig.crawlers:
             #        eta=datetime.datetime.now())
         # add new tasks, call by task.apply
         elif tasks and not check_task:
-            for task in tasks:
-                if task.get('priority', None):
-                    app.tasks[self.crawler_name+'.request_priority'].delay(task)
-                else:
-                    self.scheduler.add_new_task(task)
+            self.scheduler.add_new_task(tasks)
                 #app.tasks[self.crawler_name+'.new_task'].delay(task)
         # schedule task
         elif check_task:
@@ -179,4 +206,4 @@ for crawler in celeryconfig.crawlers:
                     self.scheduler.add_new_task(task)
         except Exception as exc: 
             # retry after some secends
-            raise self.retry(exc=exc, countdown=config.retry_time)
+           raise self.retry(exc=exc, countdown=config.retry_time)

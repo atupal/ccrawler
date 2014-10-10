@@ -6,9 +6,10 @@ if 'threading' in sys.modules:
    del sys.modules['threading']
 monkey.patch_all()
 from celery import Celery
-from celery.signals import worker_shutdown
+from celery.signals import worker_shutdown, worker_process_shutdown
 
 import config
+import logging
 
 app = Celery('ccrawler',
              #backend='redis://localhost',
@@ -23,11 +24,14 @@ app.conf.update(
 app.config_from_object('celeryconfig')
 
 import celeryconfig
+
 @worker_shutdown.connect
 def save_state(sender=None, conf=None, **kwargs):
+    logging.warn('%s saving filter...' % sender)
     if not config.multi_scheduler:
         for crawler in celeryconfig.crawlers:
             app.tasks[crawler['name'] + '.schedule'].scheduler.save_filter()
+            app.tasks[crawler['name'] + '.schedule'].scheduler.flush_task_batch()
 
 import redis
 import re
@@ -38,4 +42,4 @@ def get_message_queue_size(queue_name):
     return length
 
 if __name__ == '__main__':
-    app.start()
+    npp.start()

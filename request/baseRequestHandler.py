@@ -11,13 +11,15 @@ from gevent import monkey
 monkey.patch_all()
 import requests
 import logging
+import os
 import socket
 import time
+import json
 
 from requests import ConnectionError
 from random import choice
 
-from .response import Response
+from response import Response
 import proxy
 import cookie
 
@@ -29,6 +31,11 @@ class BaseRequestHandler(object):
         self.cookie_module = cookie_module
         self._proxy_pool = []
         self._proxy_pool_size = 0
+        self.proxy_list_cache_file = '/tmp/ccrawler_proxy_list.cache'
+        if os.path.exists(self.proxy_list_cache_file):
+            with open(self.proxy_list_cache_file) as f:
+                self._proxy_pool = json.load(f)
+                self._proxy_pool_size = len(self._proxy_pool)
         self._redis_proxy_pool_connetion = None
         self._proxy_lock = gevent.lock.Semaphore()
         self._cookie_pool = {}
@@ -134,6 +141,11 @@ class BaseRequestHandler(object):
 
     def _fetch_new_proxy_list(self):
         proxy_list = self.proxy_module.get_proxy_list()
+        try:
+            with open(self.proxy_list_cache_file, 'w') as f:
+                json.dump(proxy_list, f, indent=2)
+        except IOError:
+            pass
         #while self._proxy_checking:
             #gevent.sleep(0.1)
         self._proxy_pool += proxy_list
@@ -149,13 +161,16 @@ class BaseRequestHandler(object):
         return self._proxy_pool_size
 
 def test():
-    requestHandler = BaseRequestHandler()
+    requestHandler = BaseRequestHandler(use_proxy=True)
     jobs = []
     st = time.time()
     for i in xrange(100):
         jobs.append( gevent.spawn( requestHandler.handle, {'url': 'http://baidu.com'} ) )
     for job in jobs:
-        print job.get()
+        try:
+            print job.get()
+        except:
+            pass
     gevent.joinall(jobs)
     print time.time() - st
 

@@ -96,7 +96,7 @@ class ParseHandler(BaseParseHandler):
         data = json.loads(resp['content'])['data']
         data['uid'] = data['idstr']
         delkeys = ['cover_image_phone_level', 'domain', 'avatar_large',
-                'idstr', 'id', 'profile_image_url', 'status', 'online_status', 'avatar_hd', 'following', 'cover_image', 'cover_image_phone']
+                'idstr', 'id', 'profile_image_url', 'online_status', 'avatar_hd', 'following', 'cover_image', 'cover_image_phone']
         for key in delkeys:
             if key in data: del data[key]
         return data, []
